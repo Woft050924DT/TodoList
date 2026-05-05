@@ -9,7 +9,8 @@ import {
   deleteCategory as deleteCategoryApi,
   mapCategoryToCreatePayload,
   mapCategoryToUpdatePayload,
-  DEFAULT_CATEGORY_COLORS
+  DEFAULT_CATEGORY_COLORS,
+  categoryMappers
 } from '../service/categoryService'
 
 export const useCategoryStore = defineStore('category', () => {
@@ -140,6 +141,9 @@ export const useCategoryStore = defineStore('category', () => {
     addCategory,
     updateCategory,
     deleteCategory,
-    initializeDefaultCategories
+    initializeDefaultCategories,
+    
+    // Mappers
+    categoryMappers
   }
 })

@@ -3,16 +3,18 @@ import type { Category as CategoryType } from "../types";
 const API_URL = "http://localhost:3000/categories";
 
 export interface ApiCategory {
-  CategoryId: number;
-  Name: string;
-  Color: string;
-  CreatedAt: string;
+  categoryId: number;
+  name: string;
+  color: string;
+  createdAt: string;
 }
 
-export interface CategoryMutationResult {
+export interface ApiResponse<T> {
   status: number;
   message: string;
+  data?: T;
 }
+
 
 export interface CreateCategoryPayload {
   name: string;
@@ -33,23 +35,20 @@ export interface Category {
 
 async function parseJson<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    throw new Error(`Category API error ${res.status}`);
+    const errorData = await res.json().catch(() => ({}));
+    const errorMessage = errorData.message || `Category API error ${res.status}`;
+    throw new Error(errorMessage);
   }
   return res.json() as Promise<T>;
 }
 
-function assertOkResponse(result: CategoryMutationResult) {
-  if (result.status !== 0) {
-    throw new Error(result.message || "Category API request failed");
-  }
-}
 
 export function mapApiCategoryToCategory(category: ApiCategory): CategoryType {
   return {
-    id: String(category.CategoryId),
-    name: category.Name,
-    color: category.Color,
-    createdAt: category.CreatedAt,
+    id: String(category.categoryId),
+    name: category.name,
+    color: category.color,
+    createdAt: category.createdAt,
   };
 }
 
@@ -68,14 +67,20 @@ export function mapCategoryToUpdatePayload(category: Partial<CategoryType>): Req
 }
 
 export async function getCategories(): Promise<CategoryType[]> {
-  const categories = await parseJson<ApiCategory[]>(await fetch(API_URL));
-  return categories.map(mapApiCategoryToCategory);
+  const response = await parseJson<ApiResponse<ApiCategory[]>>(await fetch(API_URL));
+  if (response.status !== 0) {
+    throw new Error(response.message || "Failed to retrieve categories");
+  }
+  return response.data?.map(mapApiCategoryToCategory) || [];
 }
 
 export async function getCategoryById(categoryId: string | number): Promise<CategoryType | null> {
   try {
-    const category = await parseJson<ApiCategory>(await fetch(`${API_URL}/${categoryId}`));
-    return mapApiCategoryToCategory(category);
+    const response = await parseJson<ApiResponse<ApiCategory>>(await fetch(`${API_URL}/${categoryId}`));
+    if (response.status !== 0) {
+      throw new Error(response.message || "Failed to retrieve category");
+    }
+    return response.data ? mapApiCategoryToCategory(response.data) : null;
   } catch (error) {
     console.error("Failed to get category by ID:", error);
     return null;
@@ -83,32 +88,39 @@ export async function getCategoryById(categoryId: string | number): Promise<Cate
 }
 
 export async function createCategory(category: CreateCategoryPayload): Promise<void> {
-  const result = await parseJson<CategoryMutationResult>(
+  console.log('Creating category with payload:', category);
+  const result = await parseJson<ApiResponse<null>>(
     await fetch(API_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(category),
     }),
   );
-  assertOkResponse(result);
+  if (result.status !== 0) {
+    throw new Error(result.message || "Failed to create category");
+  }
 }
 
 export async function updateCategory(categoryId: string | number, category: UpdateCategoryPayload): Promise<void> {
-  const result = await parseJson<CategoryMutationResult>(
+  const result = await parseJson<ApiResponse<null>>(
     await fetch(`${API_URL}/${categoryId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(category),
     }),
   );
-  assertOkResponse(result);
+  if (result.status !== 0) {
+    throw new Error(result.message || "Failed to update category");
+  }
 }
 
 export async function deleteCategory(categoryId: string | number): Promise<void> {
-  const result = await parseJson<CategoryMutationResult>(
+  const result = await parseJson<ApiResponse<null>>(
     await fetch(`${API_URL}/${categoryId}`, { method: "DELETE" }),
   );
-  assertOkResponse(result);
+  if (result.status !== 0) {
+    throw new Error(result.message || "Failed to delete category");
+  }
 }
 
 // Default colors for categories
@@ -122,3 +134,9 @@ export const DEFAULT_CATEGORY_COLORS = [
   "#ec4899", // Pink
   "#06b6d4", // Cyan
 ];
+
+export const categoryMappers = {
+  mapApiCategoryToCategory,
+  mapCategoryToCreatePayload,
+  mapCategoryToUpdatePayload,
+};
