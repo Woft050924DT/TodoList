@@ -27,7 +27,7 @@ export interface UpdateCategoryPayload {
 }
 
 export interface Category {
-  id: string;
+  id: number;
   name: string;
   color: string;
   createdAt: string;
@@ -45,7 +45,7 @@ async function parseJson<T>(res: Response): Promise<T> {
 
 export function mapApiCategoryToCategory(category: ApiCategory): CategoryType {
   return {
-    id: String(category.categoryId),
+    id: category.categoryId,
     name: category.name,
     color: category.color,
     createdAt: category.createdAt,
@@ -74,7 +74,7 @@ export async function getCategories(): Promise<CategoryType[]> {
   return response.data?.map(mapApiCategoryToCategory) || [];
 }
 
-export async function getCategoryById(categoryId: string | number): Promise<CategoryType | null> {
+export async function getCategoryById(categoryId: number): Promise<CategoryType | null> {
   try {
     const response = await parseJson<ApiResponse<ApiCategory>>(await fetch(`${API_URL}/${categoryId}`));
     if (response.status !== 0) {
@@ -101,7 +101,7 @@ export async function createCategory(category: CreateCategoryPayload): Promise<v
   }
 }
 
-export async function updateCategory(categoryId: string | number, category: UpdateCategoryPayload): Promise<void> {
+export async function updateCategory(categoryId: number, category: UpdateCategoryPayload): Promise<void> {
   const result = await parseJson<ApiResponse<null>>(
     await fetch(`${API_URL}/${categoryId}`, {
       method: "PUT",
@@ -114,7 +114,7 @@ export async function updateCategory(categoryId: string | number, category: Upda
   }
 }
 
-export async function deleteCategory(categoryId: string | number): Promise<void> {
+export async function deleteCategory(categoryId: number): Promise<void> {
   const result = await parseJson<ApiResponse<null>>(
     await fetch(`${API_URL}/${categoryId}`, { method: "DELETE" }),
   );

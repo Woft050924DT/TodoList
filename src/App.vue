@@ -228,15 +228,3 @@ onMounted(async () => {
   }
 });
 </script>
-
-<style>
-.slide-enter-active,
-.slide-leave-active {
-  transition: all 0.25s ease;
-}
-.slide-enter-from,
-.slide-leave-to {
-  transform: translateX(20px);
-  opacity: 0;
-}
-</style>

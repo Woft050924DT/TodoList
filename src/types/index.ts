@@ -7,7 +7,7 @@ export interface Subtask {
 export type Priority = 'Cao' | 'Vừa' | 'Thấp' | 'low' | 'medium' | 'high'
 
 export interface Category {
-  id: string
+  id: number
   name: string
   color: string
   createdAt: string

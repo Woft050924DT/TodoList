@@ -10,6 +10,7 @@ import {
   mapTodoToCreatePayload,
   mapTodoToUpdatePayload
 } from '../service/taskService'
+import { useCategoryStore } from './categoryStore'
 
 export const useTodoStore = defineStore('todo', () => {
   // State
@@ -130,9 +131,26 @@ export const useTodoStore = defineStore('todo', () => {
   const fetchTodos = async () => {
     loading.value = true
     error.value = null
-    
+
     try {
       todos.value = await getTasks()
+
+      // Update category names using categoryStore
+      const categoryStore = useCategoryStore()
+      const categoryMap: Record<number, string> = {}
+      categoryStore.categories.forEach(cat => {
+        categoryMap[cat.id] = cat.name
+      })
+
+      todos.value = todos.value.map(todo => {
+        if (todo.categoryId && categoryMap[todo.categoryId]) {
+          return {
+            ...todo,
+            category: categoryMap[todo.categoryId]
+          }
+        }
+        return todo
+      })
     } catch (err) {
       error.value = 'Không thể tải danh sách công việc'
       console.error('Error fetching todos:', err)

@@ -26,7 +26,7 @@ export const useCategoryStore = defineStore('category', () => {
   ])
 
   const categoryById = computed(() => {
-    const map: Record<string, Category> = {}
+    const map: Record<number, Category> = {}
     categories.value.forEach((cat: Category) => {
       map[cat.id] = cat
     })
@@ -65,11 +65,11 @@ export const useCategoryStore = defineStore('category', () => {
     }
   }
 
-  const updateCategory = async (id: string, updates: Partial<Category>) => {
+  const updateCategory = async (id: number, updates: Partial<Category>) => {
     try {
       const payload = mapCategoryToUpdatePayload(updates)
       await updateCategoryApi(id, payload)
-      
+
       // Update local state
       const index = categories.value.findIndex((cat: Category) => cat.id === id)
       if (index !== -1) {
@@ -88,10 +88,10 @@ export const useCategoryStore = defineStore('category', () => {
     }
   }
 
-  const deleteCategory = async (id: string) => {
+  const deleteCategory = async (id: number) => {
     try {
       await deleteCategoryApi(id)
-      
+
       // Remove from local state
       const index = categories.value.findIndex((cat: Category) => cat.id === id)
       if (index !== -1) {
