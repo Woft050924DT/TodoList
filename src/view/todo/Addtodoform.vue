@@ -12,6 +12,10 @@
         <AddTodoFields
           v-model:title="form.title"
           v-model:description="form.description"
+          v-model:new-subtask="form.newSubtask"
+          :subtasks="form.subtasks"
+          @add-subtask="addDraftSubtask"
+          @remove-subtask="removeDraftSubtask"
         />
 
         <div class="flex items-center gap-2 flex-wrap mb-5">
@@ -62,6 +66,8 @@ const { fetchCategories, initializeDefaultCategories } = categoryStore;
 const form = reactive({
   title: "",
   description: "",
+  newSubtask: "",
+  subtasks: [] as string[],
   priority: "Vừa" as Priority,
   category: "" as CategoryName,
   categoryId: null as number | null,
@@ -88,7 +94,7 @@ async function submit() {
         )?.name || "Công việc"
       : "Công việc";
 
-    await store.addTodo({
+    const createdTodo = await store.addTodo({
       title: form.title.trim(),
       description: form.description.trim(),
       priority: form.priority,
@@ -102,6 +108,12 @@ async function submit() {
       updatedAt: new Date().toISOString(),
     });
 
+    addDraftSubtask();
+
+    for (const subtask of form.subtasks) {
+      await store.addSubtask(createdTodo.id, subtask);
+    }
+
     resetForm();
     emit("close");
   } catch (error) {
@@ -112,10 +124,24 @@ async function submit() {
 function resetForm() {
   form.title = "";
   form.description = "";
+  form.newSubtask = "";
+  form.subtasks = [];
   form.priority = "Vừa" as Priority;
   form.categoryId = null;
   form.dueDate = "";
   form.isCompleted = false;
+}
+
+function addDraftSubtask() {
+  const title = form.newSubtask.trim();
+  if (!title) return;
+
+  form.subtasks.push(title);
+  form.newSubtask = "";
+}
+
+function removeDraftSubtask(index: number) {
+  form.subtasks.splice(index, 1);
 }
 </script>
 

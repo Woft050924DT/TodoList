@@ -43,7 +43,7 @@
           :key="category.id"
           :value="category.id"
         >
-          {{ getCategoryIcon(category.name) }} {{ category.name }}
+          {{ category.name }}
         </option>
       </select>
     </div>
@@ -52,7 +52,7 @@
 
 <script setup lang="ts">
 import type { Category, Priority } from "@/types";
-import { getCategoryIcon, prioritySelectColors } from "./todoDisplay";
+import { prioritySelectColors } from "./todoDisplay";
 
 defineProps<{
   priority: Priority;

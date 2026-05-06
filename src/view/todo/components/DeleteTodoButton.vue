@@ -19,7 +19,7 @@
       <path d="M14 11v6" />
       <path d="M9 6V4h6v2" />
     </svg>
-    XoÃ¡ cÃ´ng viá»‡c
+    Xóa công việc
   </button>
 </template>
 

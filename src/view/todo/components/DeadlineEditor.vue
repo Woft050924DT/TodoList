@@ -1,9 +1,13 @@
 <template>
   <div>
-    <div class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">
-      Háº¡n chÃ³t
+    <div
+      class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2"
+    >
+      Hạn chót
     </div>
-    <div class="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2">
+    <div
+      class="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2"
+    >
       <svg
         width="16"
         height="16"
@@ -22,7 +26,12 @@
       <input
         type="date"
         :value="deadline || ''"
-        @change="$emit('update:deadline', ($event.target as HTMLInputElement).value || undefined)"
+        @change="
+          $emit(
+            'update:deadline',
+            ($event.target as HTMLInputElement).value || undefined,
+          )
+        "
         class="text-sm text-gray-600 focus:outline-none flex-1 bg-transparent"
       />
     </div>
@@ -30,9 +39,7 @@
       v-if="deadlineLabel && !completed"
       class="text-xs mt-2 font-semibold flex items-center gap-1"
       :class="isOverdue ? 'text-red-500' : 'text-amber-500'"
-    >
-      <span>{{ isOverdue ? "âš " : "â°" }}</span> {{ deadlineLabel }}
-    </p>
+    ></p>
   </div>
 </template>
 

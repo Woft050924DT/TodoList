@@ -79,7 +79,6 @@
               : 'text-gray-600 hover:bg-gray-50'
           "
         >
-          <span class="text-base">{{ getCategoryIcon(cat.name) }}</span>
           <span class="flex-1 text-left">{{ cat.name }}</span>
           <span
             class="text-xs font-semibold px-1.5 py-0.5 rounded-full"
@@ -110,18 +109,6 @@ const categories = computed(() => {
   const allCategories = categoryStore.categoryOptions;
   return allCategories.map((cat: any) => ({
     name: cat.name,
-    icon: getCategoryIcon(cat.name)
   }));
 });
-
-function getCategoryIcon(categoryName: string): string {
-  const icons: Record<string, string> = {
-    "Tất cả": "🗂️",
-    "Công việc": "💼",
-    "Cá nhân": "👤",
-    "Học tập": "📚",
-    "Mua sắm": "🛒",
-  };
-  return icons[categoryName] || "�";
-}
 </script>
