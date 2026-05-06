@@ -10,6 +10,11 @@ import {
   mapTodoToCreatePayload,
   mapTodoToUpdatePayload
 } from '../service/taskService'
+import {
+  createSubTask,
+  getSubTasksByTaskId,
+  updateSubTask
+} from '../service/subTaskService'
 import { useCategoryStore } from './categoryStore'
 
 export const useTodoStore = defineStore('todo', () => {
@@ -92,22 +97,20 @@ export const useTodoStore = defineStore('todo', () => {
   const todayStats = computed(() => {
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    
-    const todayTodos = todos.value.filter(todo => {
-      if (!todo.deadline) return false
+
+    const done = todos.value.filter(todo => todo.completed).length
+    const overdue = todos.value.filter(todo => {
+      if (!todo.deadline || todo.completed) return false
       const deadline = new Date(todo.deadline)
       deadline.setHours(0, 0, 0, 0)
-      return deadline.getTime() === today.getTime()
-    })
+      return deadline.getTime() < today.getTime()
+    }).length
+    const total = todos.value.length
 
     return {
-      total: todayTodos.length,
-      done: todayTodos.filter(todo => todo.completed).length,
-      overdue: todayTodos.filter(todo => {
-        if (todo.completed) return false
-        const deadline = new Date(todo.deadline!)
-        return deadline.getTime() < today.getTime()
-      }).length,
+      total,
+      done,
+      overdue,
       get remaining() {
         return this.total - this.done
       },
@@ -166,8 +169,6 @@ export const useTodoStore = defineStore('todo', () => {
       
       // Refetch all tasks to get the new one with proper ID
       await fetchTodos()
-      
-      // Return the added task (will be the first one after refetch)
       return todos.value[0]
     } catch (err) {
       error.value = 'Không thể thêm công việc'
@@ -249,34 +250,76 @@ export const useTodoStore = defineStore('todo', () => {
     }
   }
 
-  const addSubtask = async (todoId: string, title: string) => {
-    const todo = todos.value.find(t => t.id === todoId)
-    if (todo) {
-      const newSubtask: Subtask = {
-        id: Date.now().toString(),
-        title,
-        done: false
+  const fetchSubtasksForTodo = async (todoId: string) => {
+    try {
+      const todo = todos.value.find(t => t.id === todoId)
+      if (!todo) return []
+
+      const subtasks = await getSubTasksByTaskId(todoId)
+      todo.subtasks = subtasks
+
+      if (selectedTodo.value?.id === todoId) {
+        selectedTodo.value = todo
       }
-      todo.subtasks.push(newSubtask)
-      todo.updatedAt = new Date().toISOString()
-      saveTodos()
-      return newSubtask
+
+      return subtasks
+    } catch (err) {
+      error.value = 'KhÃ´ng thá»ƒ táº£i cÃ´ng viá»‡c con'
+      console.error('Error fetching subtasks:', err)
+      throw err
     }
-    return null
+  }
+
+  const addSubtask = async (todoId: string, title: string) => {
+    try {
+      const todo = todos.value.find(t => t.id === todoId)
+      if (!todo) return null
+
+      await createSubTask({
+        taskId: Number(todoId),
+        title,
+        isCompleted: false,
+        sortOrder: todo.subtasks.length + 1
+      })
+
+      const subtasks = await fetchSubtasksForTodo(todoId)
+      todo.updatedAt = new Date().toISOString()
+
+      return subtasks[subtasks.length - 1] ?? null
+    } catch (err) {
+      error.value = 'KhÃ´ng thá»ƒ thÃªm cÃ´ng viá»‡c con'
+      console.error('Error adding subtask:', err)
+      throw err
+    }
   }
 
   const toggleSubtask = async (todoId: string, subtaskId: string) => {
-    const todo = todos.value.find(t => t.id === todoId)
-    if (todo) {
+    try {
+      const todo = todos.value.find(t => t.id === todoId)
+      if (!todo) return null
+
       const subtask = todo.subtasks.find(s => s.id === subtaskId)
-      if (subtask) {
-        subtask.done = !subtask.done
-        todo.updatedAt = new Date().toISOString()
-        saveTodos()
-        return subtask
+      if (!subtask) return null
+
+      const updatedSubtask: Subtask = {
+        ...subtask,
+        done: !subtask.done
       }
+
+      await updateSubTask(subtaskId, {
+        title: updatedSubtask.title,
+        isCompleted: updatedSubtask.done,
+        sortOrder: updatedSubtask.sortOrder || todo.subtasks.findIndex(s => s.id === subtaskId) + 1
+      })
+
+      Object.assign(subtask, updatedSubtask)
+      todo.updatedAt = new Date().toISOString()
+      return subtask
+    } catch (err) {
+      error.value = 'KhÃ´ng thá»ƒ cáº­p nháº­t cÃ´ng viá»‡c con'
+      console.error('Error toggling subtask:', err)
+      throw err
     }
-    return null
   }
 
   const addTag = async (todoId: string, tag: string) => {
@@ -349,8 +392,11 @@ export const useTodoStore = defineStore('todo', () => {
     console.log('Data is now managed by API, localStorage not used')
   }
 
-  const selectTodo = (todo: Todo | null) => {
+  const selectTodo = async (todo: Todo | null) => {
     selectedTodo.value = todo
+    if (todo) {
+      await fetchSubtasksForTodo(todo.id)
+    }
   }
 
   return {
@@ -376,6 +422,7 @@ export const useTodoStore = defineStore('todo', () => {
     updateTodo,
     deleteTodo,
     toggleTodo,
+    fetchSubtasksForTodo,
     addSubtask,
     toggleSubtask,
     addTag,

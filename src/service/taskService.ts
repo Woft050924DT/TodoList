@@ -1,4 +1,5 @@
 import type { CategoryName, Priority, Todo } from "../types";
+import { mapApiSubTaskToSubtask, type ApiSubTask } from "./subTaskService";
 
 const API_URL = "http://localhost:3000/tasks";
 
@@ -12,6 +13,8 @@ export interface ApiTask {
   DueDate: string | null;
   CreatedAt: string;
   UpdatedAt: string;
+  subTasks?: ApiSubTask[];
+  SubTasks?: ApiSubTask[];
 }
 
 export interface TaskMutationResult {
@@ -85,6 +88,8 @@ async function parseJson<T>(res: Response): Promise<T> {
 }
 
 export function mapApiTaskToTodo(task: ApiTask): Todo {
+  const subTasks = task.subTasks ?? task.SubTasks ?? [];
+
   return {
     id: String(task.TaskId),
     title: task.Title,
@@ -94,7 +99,7 @@ export function mapApiTaskToTodo(task: ApiTask): Todo {
     categoryId: task.CategoryId,
     deadline: toDateInputValue(task.DueDate) || undefined,
     tags: [],
-    subtasks: [],
+    subtasks: subTasks.map(mapApiSubTaskToSubtask),
     completed: task.Status === 2,
     starred: false,
     createdAt: toDateInputValue(task.CreatedAt) ?? "",
@@ -130,13 +135,13 @@ export function mapTodoToCreatePayload(todo: Omit<Todo, "id" | "createdAt" | "su
 }
 
 export async function getTasks(): Promise<Todo[]> {
-  const tasks = await parseJson<ApiTask[]>(await fetch(API_URL));
+  const tasks = await parseJson<ApiTask[]>(await fetch(`${API_URL}?includeRelated=true`));
   return tasks.map(mapApiTaskToTodo);
 }
 
 export async function getTaskById(taskId: string | number): Promise<Todo | null> {
   try {
-    const task = await parseJson<ApiTask>(await fetch(`${API_URL}/${taskId}`));
+    const task = await parseJson<ApiTask>(await fetch(`${API_URL}/${taskId}?includeRelated=true`));
     return mapApiTaskToTodo(task);
   } catch (error) {
     console.error("Failed to get task by ID:", error);

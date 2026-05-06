@@ -1,6 +1,6 @@
 <template>
   <div
-    @click="store.selectedTodo = todo"
+    @click="store.selectTodo(todo)"
     class="bg-white rounded-xl border transition-all duration-200 cursor-pointer hover:shadow-md group"
     :class="[
       isSelected

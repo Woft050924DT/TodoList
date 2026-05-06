@@ -1,7 +1,9 @@
 export interface Subtask {
   id: string
+  taskId?: number
   title: string
   done: boolean
+  sortOrder?: number
 }
 
 export type Priority = 'Cao' | 'Vừa' | 'Thấp' | 'low' | 'medium' | 'high'

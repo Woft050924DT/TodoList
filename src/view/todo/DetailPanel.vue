@@ -1,6 +1,6 @@
 <template>
   <!-- Modal Backdrop -->
-  <div class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" @click.self="store.selectedTodo = null">
+  <div class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4" @click.self="store.selectTodo(null)">
     <!-- Modal Content -->
     <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col animate-modal-in">
       <div
@@ -8,7 +8,7 @@
       >
         <span class="text-base font-semibold text-gray-800">Chi tiết công việc</span>
         <button
-          @click="store.selectedTodo = null"
+          @click="store.selectTodo(null)"
           class="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"
         >
           <svg
@@ -371,6 +371,7 @@ onMounted(async () => {
   if (categories.value.length === 0) {
     await initializeDefaultCategories();
   }
+  await store.fetchSubtasksForTodo(props.todo.id);
 });
 
 const isOverdue = computed(() => store.isOverdue(props.todo));

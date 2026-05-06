@@ -141,7 +141,7 @@ const form = reactive({
   isCompleted: false,
 });
 
-const priorities = [
+const priorities: Array<{ value: Priority; label: string; activeClass: string }> = [
   { value: "Thấp", label: "Thấp", activeClass: "border-green-400 bg-green-50 text-green-700" },
   { value: "Vừa", label: "Vừa", activeClass: "border-amber-400 bg-amber-50 text-amber-700" },
   { value: "Cao", label: "Cao", activeClass: "border-red-400 bg-red-50 text-red-700" },
