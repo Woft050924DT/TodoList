@@ -4,17 +4,22 @@ import { mapApiSubTaskToSubtask, type ApiSubTask } from "./subTaskService";
 const API_URL = "http://localhost:3000/tasks";
 
 export interface ApiTask {
-  TaskId: number;
-  CategoryId: number | null;
-  Title: string;
-  Description: string | null;
-  Priority: number;
-  Status: number;
-  DueDate: string | null;
-  CreatedAt: string;
-  UpdatedAt: string;
-  subTasks?: ApiSubTask[];
+  TaskId?: number;
+  CategoryId?: number | null;
+  Title?: string;
+  Description?: string | null;
+  Priority?: number;
+  Status?: number;
+  DueDate?: string | null;
+  CreatedAt?: string;
+  UpdatedAt?: string;
   SubTasks?: ApiSubTask[];
+}
+
+export interface ApiResponse<T> {
+  status: number;
+  message?: string;
+  data?: T;
 }
 
 export interface TaskMutationResult {
@@ -87,23 +92,41 @@ async function parseJson<T>(res: Response): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+function isApiResponse<T>(result: ApiResponse<T> | T): result is ApiResponse<T> {
+  return typeof result === "object" && result !== null && "status" in result;
+}
+
+function unwrapTaskResponse<T>(result: ApiResponse<T> | T): T {
+  if (!isApiResponse(result)) return result;
+  if (result.status !== 0) {
+    throw new Error(result.message || "Task API request failed");
+  }
+  return result.data as T;
+}
+
 export function mapApiTaskToTodo(task: ApiTask): Todo {
-  const subTasks = task.subTasks ?? task.SubTasks ?? [];
+  const taskId = task.TaskId ?? task.taskId;
+  const categoryId = task.CategoryId ?? task.categoryId ?? null;
+  const priority = task.Priority ?? task.priority ?? 2;
+  const status = task.Status ?? task.status ?? 0;
+  const subTasks = task.subTasks ?? task.SubTasks ?? task.subtasks ?? [];
 
   return {
-    id: String(task.TaskId),
-    title: task.Title,
-    description: task.Description ?? "",
-    priority: priorityByApi[task.Priority] ?? "Vừa",
-    category: task.CategoryId ? categoryByApi[task.CategoryId] ?? "Công việc" : "Công việc",
-    categoryId: task.CategoryId,
-    deadline: toDateInputValue(task.DueDate) || undefined,
+    id: taskId !== undefined ? String(taskId) : "",
+    title: task.Title ?? task.title ?? "",
+    description: task.Description ?? task.description ?? "",
+    priority: priorityByApi[priority] ?? "Vừa",
+    category: categoryId
+      ? categoryByApi[categoryId] ?? "Công việc"
+      : "Công việc",
+    categoryId,
+    deadline: toDateInputValue(task.DueDate ?? task.dueDate ?? null) || undefined,
     tags: [],
     subtasks: subTasks.map(mapApiSubTaskToSubtask),
-    completed: task.Status === 2,
+    completed: status === 2,
     starred: false,
-    createdAt: toDateInputValue(task.CreatedAt) ?? "",
-    updatedAt: toDateInputValue(task.UpdatedAt) ?? "",
+    createdAt: toDateInputValue(task.CreatedAt ?? task.createdAt ?? null) ?? "",
+    updatedAt: toDateInputValue(task.UpdatedAt ?? task.updatedAt ?? null) ?? "",
   };
 }
 
@@ -118,31 +141,37 @@ export function mapTodoToUpdatePayload(todo: Todo): Required<UpdateTaskPayload> 
   };
 }
 
-export function mapTodoToCreatePayload(todo: Omit<Todo, "id" | "createdAt" | "subtasks" | "starred" | "tags">): Required<CreateTaskPayload> {
-  const payload = {
-    CategoryId: todo.categoryId !== undefined ? todo.categoryId : (todo.category ? apiByCategory[todo.category] : null),
+export function mapTodoToCreatePayload(
+  todo: Omit<Todo, "id" | "createdAt" | "subtasks" | "starred" | "tags">,
+): Required<CreateTaskPayload> {
+  return {
+    CategoryId:
+      todo.categoryId !== undefined
+        ? todo.categoryId
+        : todo.category
+          ? apiByCategory[todo.category]
+          : null,
     Title: todo.title,
     Description: todo.description || null,
     Priority: apiByPriority[todo.priority],
     Status: todo.completed ? 2 : 0,
     DueDate: todo.deadline || null,
   };
-  
-  console.log('mapTodoToCreatePayload - Input:', todo);
-  console.log('mapTodoToCreatePayload - Output payload:', payload);
-  
-  return payload;
 }
 
 export async function getTasks(): Promise<Todo[]> {
-  const tasks = await parseJson<ApiTask[]>(await fetch(`${API_URL}?includeRelated=true`));
-  return tasks.map(mapApiTaskToTodo);
+  const result = await parseJson<ApiResponse<ApiTask[]> | ApiTask[]>(
+    await fetch(`${API_URL}?includeRelated=true`),
+  );
+  return unwrapTaskResponse(result).map(mapApiTaskToTodo);
 }
 
 export async function getTaskById(taskId: string | number): Promise<Todo | null> {
   try {
-    const task = await parseJson<ApiTask>(await fetch(`${API_URL}/${taskId}?includeRelated=true`));
-    return mapApiTaskToTodo(task);
+    const result = await parseJson<ApiResponse<ApiTask> | ApiTask>(
+      await fetch(`${API_URL}/${taskId}?includeRelated=true`),
+    );
+    return mapApiTaskToTodo(unwrapTaskResponse(result));
   } catch (error) {
     console.error("Failed to get task by ID:", error);
     return null;

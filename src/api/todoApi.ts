@@ -6,7 +6,6 @@ import type { Todo } from "@/types";
 import { getSubTasksByTaskId } from "@/service/subTaskService";
 import { useCategoryStore } from "@/store/categoryStore";
 
-
 export const hydrateTodos = async (raw: Todo[]): Promise<Todo[]> => {
   const categoryStore = useCategoryStore();
   const categoryMap = Object.fromEntries(
@@ -21,7 +20,9 @@ export const hydrateTodos = async (raw: Todo[]): Promise<Todo[]> => {
   }));
 
   const subtaskResults = await Promise.allSettled(
-    withCategory.map((todo) => getSubTasksByTaskId(todo.id)),
+    withCategory.map((todo) =>
+      todo.id ? getSubTasksByTaskId(todo.id) : Promise.resolve(todo.subtasks ?? []),
+    ),
   );
 
   return withCategory.map((todo, i) => ({
@@ -29,7 +30,7 @@ export const hydrateTodos = async (raw: Todo[]): Promise<Todo[]> => {
     subtasks:
       subtaskResults[i].status === "fulfilled"
         ? subtaskResults[i].value
-        : (console.warn(`Không thể tải subtask cho task ${todo.id}`),
+        : (console.warn(`Không thể tải subtask cho task ${todo.id || "<missing-id>"}`),
           todo.subtasks ?? []),
   }));
 };
