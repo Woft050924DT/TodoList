@@ -128,20 +128,22 @@
             </span>
           </div>
 
-          <!-- Progress bar -->
+          <!-- Subtask progress -->
           <div
             v-if="todo.subtasks.length"
-            class="mt-2.5 flex items-center gap-2"
+            class="mt-3"
           >
-            <div class="flex-1 bg-gray-100 rounded-full h-1.5">
+            <div class="mb-1.5 flex items-center justify-between gap-2">
+              <span class="text-[10px] text-violet-600 font-bold shrink-0">
+                {{ doneSubs }}/{{ todo.subtasks.length }}
+              </span>
+            </div>
+            <div class="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
               <div
                 class="bg-violet-500 h-1.5 rounded-full transition-all duration-300"
-                :style="`width:${subProgress}%`"
+                :style="{ width: `${subProgress}%` }"
               ></div>
             </div>
-            <span class="text-[10px] text-gray-400 font-medium shrink-0">
-              {{ doneSubs }}/{{ todo.subtasks.length }}
-            </span>
           </div>
         </div>
       </div>

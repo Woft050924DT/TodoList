@@ -154,6 +154,20 @@ export const useTodoStore = defineStore('todo', () => {
         }
         return todo
       })
+
+      todos.value = await Promise.all(
+        todos.value.map(async (todo) => {
+          try {
+            return {
+              ...todo,
+              subtasks: await getSubTasksByTaskId(todo.id)
+            }
+          } catch (err) {
+            console.warn(`Could not load subtasks for task ${todo.id}:`, err)
+            return todo
+          }
+        })
+      )
     } catch (err) {
       error.value = 'Không thể tải danh sách công việc'
       console.error('Error fetching todos:', err)
