@@ -1,417 +1,291 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { Todo, Subtask } from '@/types'
+// stores/todoStore.ts
+import { defineStore } from "pinia";
+import { ref, computed } from "vue";
+import type { Todo, Subtask } from "@/types";
 import {
   getTasks,
-  getTaskById,
   createTask,
   updateTask,
   deleteTask,
   mapTodoToCreatePayload,
-  mapTodoToUpdatePayload
-} from '../service/taskService'
+  mapTodoToUpdatePayload,
+} from "@/service/taskService";
 import {
   createSubTask,
   getSubTasksByTaskId,
-  updateSubTask
-} from '../service/subTaskService'
-import { useCategoryStore } from './categoryStore'
+  updateSubTask,
+} from "@/service/subTaskService";
+import { PRIORITY_ORDER } from "@/constants/priority";
+import { toDateOnly } from "@/utils/dateUtils";
+import { deadlineLabel, isOverdue } from "@/utils/todoHelpers";
+import { hydrateTodos } from "@/api/todoApi";
 
-export const useTodoStore = defineStore('todo', () => {
-  // State
-  const todos = ref<Todo[]>([])
-  const loading = ref(false)
-  const error = ref<string | null>(null)
-  const searchQuery = ref('')
-  const sortBy = ref<'deadline' | 'priority' | 'createdAt'>('createdAt')
-  const activeTab = ref<'Tất cả' | 'Hôm nay' | 'Quá hạn'>('Tất cả')
-  const activeCategory = ref('Tất cả')
-  const selectedTodo = ref<Todo | null>(null)
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-  // Computed properties
+type SortKey = "deadline" | "priority" | "createdAt";
+type TabKey = "Tất cả" | "Hôm nay" | "Quá hạn";
+
+// ─── Helpers (pure, module-scoped) ────────────────────────────────────────────
+
+function isToday(date: Date | string): boolean {
+  return toDateOnly(date).getTime() === toDateOnly(new Date()).getTime();
+}
+
+function isPastDeadline(todo: Todo): boolean {
+  if (!todo.deadline || todo.completed) return false;
+  return toDateOnly(todo.deadline).getTime() < toDateOnly(new Date()).getTime();
+}
+
+function matchesSearch(todo: Todo, query: string): boolean {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  return (
+    todo.title.toLowerCase().includes(q) ||
+    (todo.description?.toLowerCase().includes(q) ?? false)
+  );
+}
+
+function matchesTab(todo: Todo, tab: TabKey): boolean {
+  if (tab === "Hôm nay") return !!todo.deadline && isToday(todo.deadline);
+  if (tab === "Quá hạn") return isPastDeadline(todo);
+  return true;
+}
+
+function sortTodos(todos: Todo[], sortKey: SortKey): Todo[] {
+  return [...todos].sort((a, b) => {
+    switch (sortKey) {
+      case "deadline":
+        if (!a.deadline) return 1;
+        if (!b.deadline) return -1;
+        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+
+      case "priority":
+        return (
+          (PRIORITY_ORDER[a.priority] ?? 99) -
+          (PRIORITY_ORDER[b.priority] ?? 99)
+        );
+
+      case "createdAt":
+      default:
+        return (
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+    }
+  });
+}
+
+// ─── Store ────────────────────────────────────────────────────────────────────
+
+export const useTodoStore = defineStore("todo", () => {
+  // ── State ──────────────────────────────────────────────────────────────────
+
+  const todos = ref<Todo[]>([]);
+  const loading = ref(false);
+  const error = ref<string | null>(null);
+  const searchQuery = ref("");
+  const sortBy = ref<SortKey>("createdAt");
+  const activeTab = ref<TabKey>("Tất cả");
+  const activeCategory = ref("Tất cả");
+  const selectedTodo = ref<Todo | null>(null);
+
+  // ── Computed ───────────────────────────────────────────────────────────────
+
   const filteredTodos = computed(() => {
-    let filtered = todos.value
+    const q = searchQuery.value.trim();
+    const tab = activeTab.value;
+    const category = activeCategory.value;
 
-    // Filter by search query
-    if (searchQuery.value) {
-      filtered = filtered.filter(todo =>
-        todo.title.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-        todo.description?.toLowerCase().includes(searchQuery.value.toLowerCase())
-      )
-    }
+    const filtered = todos.value.filter(
+      (todo) =>
+        matchesSearch(todo, q) &&
+        matchesTab(todo, tab) &&
+        (category === "Tất cả" || todo.category === category),
+    );
 
-    // Filter by category
-    if (activeCategory.value !== 'Tất cả') {
-      filtered = filtered.filter(todo => todo.category === activeCategory.value)
-    }
+    return sortTodos(filtered, sortBy.value);
+  });
 
-    // Filter by tab
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    if (activeTab.value === 'Hôm nay') {
-      filtered = filtered.filter(todo => {
-        if (!todo.deadline) return false
-        const deadline = new Date(todo.deadline)
-        deadline.setHours(0, 0, 0, 0)
-        return deadline.getTime() === today.getTime()
-      })
-    } else if (activeTab.value === 'Quá hạn') {
-      filtered = filtered.filter(todo => {
-        if (!todo.deadline || todo.completed) return false
-        const deadline = new Date(todo.deadline)
-        deadline.setHours(0, 0, 0, 0)
-        return deadline.getTime() < today.getTime()
-      })
-    }
-
-    // Sort
-    filtered.sort((a, b) => {
-      if (sortBy.value === 'deadline') {
-        if (!a.deadline) return 1
-        if (!b.deadline) return -1
-        return new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
-      } else if (sortBy.value === 'priority') {
-        const priorityOrder = { 'Cao': 0, 'Vừa': 1, 'Thấp': 2, 'high': 0, 'medium': 1, 'low': 2 }
-        return priorityOrder[a.priority] - priorityOrder[b.priority]
-      } else {
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      }
-    })
-
-    return filtered
-  })
-
-  const overdueCount = computed(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    
-    return todos.value.filter(todo => {
-      if (!todo.deadline || todo.completed) return false
-      const deadline = new Date(todo.deadline)
-      deadline.setHours(0, 0, 0, 0)
-      return deadline.getTime() < today.getTime()
-    }).length
-  })
+  const overdueCount = computed(
+    () => todos.value.filter(isPastDeadline).length,
+  );
 
   const todayStats = computed(() => {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-
-    const done = todos.value.filter(todo => todo.completed).length
-    const overdue = todos.value.filter(todo => {
-      if (!todo.deadline || todo.completed) return false
-      const deadline = new Date(todo.deadline)
-      deadline.setHours(0, 0, 0, 0)
-      return deadline.getTime() < today.getTime()
-    }).length
-    const total = todos.value.length
+    const total = todos.value.length;
+    const done = todos.value.filter((t) => t.completed).length;
+    const overdue = todos.value.filter(isPastDeadline).length;
 
     return {
       total,
       done,
       overdue,
-      get remaining() {
-        return this.total - this.done
-      },
-      get pct() {
-        return this.total > 0 ? Math.round((this.done / this.total) * 100) : 0
-      }
+      remaining: total - done,
+      pct: total > 0 ? Math.round((done / total) * 100) : 0,
+    };
+  });
+
+  const categoryCounts = computed(() =>
+    todos.value.reduce<Record<string, number>>((acc, todo) => {
+      if (todo.category) acc[todo.category] = (acc[todo.category] ?? 0) + 1;
+      return acc;
+    }, {}),
+  );
+
+  // ── Private helpers ────────────────────────────────────────────────────────
+
+  function findTodoOrThrow(id: string): Todo {
+    const todo = todos.value.find((t) => t.id === id);
+    if (!todo) throw new Error(`Task ${id} không tìm thấy`);
+    return todo;
+  }
+
+  function syncSelectedTodo(updated: Todo): void {
+    if (selectedTodo.value?.id === updated.id) {
+      selectedTodo.value = updated;
     }
-  })
+  }
 
-  const categoryCounts = computed(() => {
-    const counts: Record<string, number> = {}
-    todos.value.forEach(todo => {
-      if (todo.category) {
-        counts[todo.category] = (counts[todo.category] || 0) + 1
-      }
-    })
-    return counts
-  })
+  function touchTodo(todo: Todo): void {
+    todo.updatedAt = new Date().toISOString();
+  }
 
-  // Actions
-  const fetchTodos = async () => {
-    loading.value = true
-    error.value = null
+  // ── Actions ────────────────────────────────────────────────────────────────
 
+  async function fetchTodos(): Promise<void> {
+    loading.value = true;
+    error.value = null;
     try {
-      todos.value = await getTasks()
-
-      // Update category names using categoryStore
-      const categoryStore = useCategoryStore()
-      const categoryMap: Record<number, string> = {}
-      categoryStore.categories.forEach(cat => {
-        categoryMap[cat.id] = cat.name
-      })
-
-      todos.value = todos.value.map(todo => {
-        if (todo.categoryId && categoryMap[todo.categoryId]) {
-          return {
-            ...todo,
-            category: categoryMap[todo.categoryId]
-          }
-        }
-        return todo
-      })
-
-      todos.value = await Promise.all(
-        todos.value.map(async (todo) => {
-          try {
-            return {
-              ...todo,
-              subtasks: await getSubTasksByTaskId(todo.id)
-            }
-          } catch (err) {
-            console.warn(`Could not load subtasks for task ${todo.id}:`, err)
-            return todo
-          }
-        })
-      )
+      todos.value = await hydrateTodos(await getTasks());
     } catch (err) {
-      error.value = 'Không thể tải danh sách công việc'
-      console.error('Error fetching todos:', err)
+      error.value = "Không thể tải danh sách công việc";
+      console.error("[fetchTodos]", err);
     } finally {
-      loading.value = false
+      loading.value = false;
     }
   }
 
-  const addTodo = async (todo: Omit<Todo, 'id'>) => {
-    try {
-      const payload = mapTodoToCreatePayload(todo)
-      await createTask(payload)
-      
-      // Refetch all tasks to get the new one with proper ID
-      await fetchTodos()
-      return todos.value[0]
-    } catch (err) {
-      error.value = 'Không thể thêm công việc'
-      console.error('Error adding todo:', err)
-      throw err
+  async function addTodo(todo: Omit<Todo, "id">): Promise<Todo> {
+    await createTask(mapTodoToCreatePayload(todo));
+    await fetchTodos();
+
+    const createdTodo = todos.value[0];
+    if (!createdTodo) {
+      throw new Error("Khong the tai lai cong viec sau khi tao");
     }
+
+    return createdTodo;
   }
 
-  const updateTodo = async (id: string, updates: Partial<Todo>) => {
-    try {
-      // Get the current task
-      const currentTask = todos.value.find(todo => todo.id === id)
-      if (!currentTask) {
-        throw new Error('Task not found')
-      }
-      
-      // Merge current task with updates
-      const updatedTask = { ...currentTask, ...updates }
-      const payload = mapTodoToUpdatePayload(updatedTask)
-      
-      await updateTask(id, payload)
-      
-      // Update local state
-      const index = todos.value.findIndex(todo => todo.id === id)
-      if (index !== -1) {
-        todos.value[index] = {
-          ...todos.value[index],
-          ...updates,
-          updatedAt: new Date().toISOString()
-        }
-        return todos.value[index]
-      }
-      return null
-    } catch (err) {
-      error.value = 'Không thể cập nhật công việc'
-      console.error('Error updating todo:', err)
-      throw err
-    }
+  async function updateTodo(id: string, updates: Partial<Todo>): Promise<Todo> {
+    const index = todos.value.findIndex((t) => t.id === id);
+    if (index === -1) throw new Error(`Task ${id} không tìm thấy`);
+
+    const merged: Todo = {
+      ...todos.value[index],
+      ...updates,
+      updatedAt: new Date().toISOString(),
+    };
+
+    await updateTask(id, mapTodoToUpdatePayload(merged));
+    todos.value[index] = merged;
+    syncSelectedTodo(merged);
+    return merged;
   }
 
-  const deleteTodo = async (id: string) => {
-    try {
-      await deleteTask(id)
-      
-      // Remove from local state
-      const index = todos.value.findIndex(todo => todo.id === id)
-      if (index !== -1) {
-        todos.value.splice(index, 1)
-        return true
-      }
-      return false
-    } catch (err) {
-      error.value = 'Không thể xóa công việc'
-      console.error('Error deleting todo:', err)
-      throw err
-    }
+  async function deleteTodo(id: string): Promise<void> {
+    await deleteTask(id);
+    const index = todos.value.findIndex((t) => t.id === id);
+    if (index !== -1) todos.value.splice(index, 1);
+    if (selectedTodo.value?.id === id) selectedTodo.value = null;
   }
 
-  const toggleTodo = async (id: string) => {
-    try {
-      const todo = todos.value.find(t => t.id === id)
-      if (!todo) {
-        throw new Error('Task not found')
-      }
-      
-      const updatedTodo = { ...todo, completed: !todo.completed }
-      const payload = mapTodoToUpdatePayload(updatedTodo)
-      
-      await updateTask(id, payload)
-      
-      // Update local state
-      todo.completed = !todo.completed
-      todo.updatedAt = new Date().toISOString()
-      return todo
-    } catch (err) {
-      error.value = 'Không thể cập nhật trạng thái công việc'
-      console.error('Error toggling todo:', err)
-      throw err
-    }
+  async function toggleTodo(id: string): Promise<Todo> {
+    const todo = findTodoOrThrow(id);
+    return updateTodo(id, { completed: !todo.completed });
   }
 
-  const fetchSubtasksForTodo = async (todoId: string) => {
-    try {
-      const todo = todos.value.find(t => t.id === todoId)
-      if (!todo) return []
-
-      const subtasks = await getSubTasksByTaskId(todoId)
-      todo.subtasks = subtasks
-
+  async function fetchSubtasksForTodo(todoId: string): Promise<Subtask[]> {
+    const subtasks = await getSubTasksByTaskId(todoId);
+    const todo = todos.value.find((t) => t.id === todoId);
+    if (todo) {
+      todo.subtasks = subtasks;
       if (selectedTodo.value?.id === todoId) {
-        selectedTodo.value = todo
-      }
-
-      return subtasks
-    } catch (err) {
-      error.value = 'KhÃ´ng thá»ƒ táº£i cÃ´ng viá»‡c con'
-      console.error('Error fetching subtasks:', err)
-      throw err
-    }
-  }
-
-  const addSubtask = async (todoId: string, title: string) => {
-    try {
-      const todo = todos.value.find(t => t.id === todoId)
-      if (!todo) return null
-
-      await createSubTask({
-        taskId: Number(todoId),
-        title,
-        isCompleted: false,
-        sortOrder: todo.subtasks.length + 1
-      })
-
-      const subtasks = await fetchSubtasksForTodo(todoId)
-      todo.updatedAt = new Date().toISOString()
-
-      return subtasks[subtasks.length - 1] ?? null
-    } catch (err) {
-      error.value = 'KhÃ´ng thá»ƒ thÃªm cÃ´ng viá»‡c con'
-      console.error('Error adding subtask:', err)
-      throw err
-    }
-  }
-
-  const toggleSubtask = async (todoId: string, subtaskId: string) => {
-    try {
-      const todo = todos.value.find(t => t.id === todoId)
-      if (!todo) return null
-
-      const subtask = todo.subtasks.find(s => s.id === subtaskId)
-      if (!subtask) return null
-
-      const updatedSubtask: Subtask = {
-        ...subtask,
-        done: !subtask.done
-      }
-
-      await updateSubTask(subtaskId, {
-        title: updatedSubtask.title,
-        isCompleted: updatedSubtask.done,
-        sortOrder: updatedSubtask.sortOrder || todo.subtasks.findIndex(s => s.id === subtaskId) + 1
-      })
-
-      Object.assign(subtask, updatedSubtask)
-      todo.updatedAt = new Date().toISOString()
-      return subtask
-    } catch (err) {
-      error.value = 'KhÃ´ng thá»ƒ cáº­p nháº­t cÃ´ng viá»‡c con'
-      console.error('Error toggling subtask:', err)
-      throw err
-    }
-  }
-
-  const addTag = async (todoId: string, tag: string) => {
-    const todo = todos.value.find(t => t.id === todoId)
-    if (todo && !todo.tags.includes(tag)) {
-      todo.tags.push(tag)
-      todo.updatedAt = new Date().toISOString()
-      saveTodos()
-      return true
-    }
-    return false
-  }
-
-  const removeTag = async (todoId: string, tag: string) => {
-    const todo = todos.value.find(t => t.id === todoId)
-    if (todo) {
-      const index = todo.tags.indexOf(tag)
-      if (index !== -1) {
-        todo.tags.splice(index, 1)
-        todo.updatedAt = new Date().toISOString()
-        saveTodos()
-        return true
+        selectedTodo.value = { ...todo };
       }
     }
-    return false
+    return subtasks;
   }
 
-  const toggleStar = async (todoId: string) => {
-    const todo = todos.value.find(t => t.id === todoId)
-    if (todo) {
-      todo.starred = !todo.starred
-      todo.updatedAt = new Date().toISOString()
-      saveTodos()
-      return todo
-    }
-    return null
+  async function addSubtask(todoId: string, title: string): Promise<Subtask> {
+    const todo = findTodoOrThrow(todoId);
+
+    await createSubTask({
+      taskId: Number(todoId),
+      title,
+      isCompleted: false,
+      sortOrder: (todo.subtasks?.length ?? 0) + 1,
+    });
+
+    const subtasks = await fetchSubtasksForTodo(todoId);
+    touchTodo(todo);
+
+    const added = subtasks.at(-1);
+    if (!added) throw new Error("Subtask vừa tạo không tìm thấy");
+    return added;
   }
 
-  const isOverdue = (todo: Todo) => {
-    if (!todo.deadline || todo.completed) return false
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const deadline = new Date(todo.deadline)
-    deadline.setHours(0, 0, 0, 0)
-    return deadline.getTime() < today.getTime()
+  async function toggleSubtask(
+    todoId: string,
+    subtaskId: string,
+  ): Promise<Subtask> {
+    const todo = findTodoOrThrow(todoId);
+    const subtask = todo.subtasks?.find((s) => s.id === subtaskId);
+    if (!subtask) throw new Error(`Subtask ${subtaskId} không tìm thấy`);
+
+    const updated: Subtask = { ...subtask, done: !subtask.done };
+
+    await updateSubTask(subtaskId, {
+      title: updated.title,
+      isCompleted: updated.done,
+      sortOrder:
+        updated.sortOrder ??
+        (todo.subtasks?.findIndex((s) => s.id === subtaskId) ?? 0) + 1,
+    });
+
+    Object.assign(subtask, updated);
+    touchTodo(todo);
+    return subtask;
   }
 
-  const deadlineLabel = (deadline?: string, completed?: boolean) => {
-    if (!deadline) return ''
-    
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const deadlineDate = new Date(deadline)
-    deadlineDate.setHours(0, 0, 0, 0)
-    
-    if (completed) return 'Đã hoàn thành'
-    
-    const diffTime = deadlineDate.getTime() - today.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    
-    if (diffDays < 0) return 'Quá hạn'
-    if (diffDays === 0) return 'Hôm nay'
-    if (diffDays === 1) return 'Ngày mai'
-    if (diffDays <= 7) return `${diffDays} ngày nữa`
-    return new Date(deadline).toLocaleDateString('vi-VN')
+  async function addTag(todoId: string, tag: string): Promise<void> {
+    const todo = findTodoOrThrow(todoId);
+    if (todo.tags.includes(tag)) return;
+    todo.tags.push(tag);
+    touchTodo(todo);
+    // TODO: persist via updateTask when API ready
   }
 
-  const saveTodos = () => {
-    // No longer needed - data is managed by API
-    console.log('Data is now managed by API, localStorage not used')
+  async function removeTag(todoId: string, tag: string): Promise<void> {
+    const todo = findTodoOrThrow(todoId);
+    const index = todo.tags.indexOf(tag);
+    if (index === -1) return;
+    todo.tags.splice(index, 1);
+    touchTodo(todo);
+    // TODO: persist via updateTask when API ready
   }
 
-  const selectTodo = async (todo: Todo | null) => {
-    selectedTodo.value = todo
-    if (todo) {
-      await fetchSubtasksForTodo(todo.id)
-    }
+  async function toggleStar(todoId: string): Promise<Todo> {
+    const todo = findTodoOrThrow(todoId);
+    todo.starred = !todo.starred;
+    touchTodo(todo);
+    // TODO: await updateTask(todoId, mapTodoToUpdatePayload(todo))
+    return todo;
   }
+
+  async function selectTodo(todo: Todo | null): Promise<void> {
+    selectedTodo.value = todo;
+    if (todo) await fetchSubtasksForTodo(todo.id);
+  }
+
 
   return {
     // State
@@ -423,13 +297,13 @@ export const useTodoStore = defineStore('todo', () => {
     activeTab,
     activeCategory,
     selectedTodo,
-    
     // Computed
     filteredTodos,
     overdueCount,
     todayStats,
     categoryCounts,
-    
+    isOverdue,
+    deadlineLabel,
     // Actions
     fetchTodos,
     addTodo,
@@ -442,11 +316,9 @@ export const useTodoStore = defineStore('todo', () => {
     addTag,
     removeTag,
     toggleStar,
-    isOverdue,
-    deadlineLabel,
-    selectTodo
-  }
-})
+    selectTodo,
+  };
+});
 
-// Export useTasks as alias for useTodoStore
-export const useTasks = useTodoStore
+// Alias giữ backward compat
+export const useTasks = useTodoStore;
